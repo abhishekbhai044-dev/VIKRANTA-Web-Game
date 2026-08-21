@@ -1,131 +1,35 @@
 import { supabaseConfigured } from './lib/supabase.js'
 import { getSession, bootstrapPlayer, savePlayerState, signInWithPassword, signUp, signOut, subscribeToAuth } from './lib/player-api.js'
+import { updateQuest, getProgress, getInventory } from './lib/game-api.js'
 
 const root = document.querySelector('#root')
-
 root.innerHTML = `
-  <main class="shell">
-    <section class="hero" aria-labelledby="title">
-      <p class="eyebrow">PROJECT GARUDA · WEB GAME</p>
-      <h1 id="title">VIKRANTA</h1>
-      <p class="tagline">Valor is the Root of Victory.</p>
-      <p id="status" class="status">Checking backend configuration…</p>
-      <div id="player" class="player" hidden></div>
-      <form id="auth" class="auth" hidden>
-        <input id="email" type="email" autocomplete="email" placeholder="Email" required />
-        <input id="password" type="password" autocomplete="current-password" placeholder="Password" minlength="6" required />
-        <input id="displayName" type="text" autocomplete="nickname" placeholder="Display name (for new account)" />
-        <div class="actions">
-          <button type="submit" data-mode="signin">Sign in</button>
-          <button type="button" id="signup">Create account</button>
-        </div>
-      </form>
-      <button id="logout" hidden>Sign out</button>
-    </section>
-  </main>
-`
+  <main class="shell"><section class="hero" aria-labelledby="title">
+    <p class="eyebrow">PROJECT GARUDA · WEB GAME</p><h1 id="title">VIKRANTA</h1>
+    <p class="tagline">Valor is the Root of Victory.</p><p id="status" class="status">Checking backend configuration…</p>
+    <div id="player" class="player" hidden></div>
+    <div id="game" class="game" hidden>
+      <div class="world"><div id="avatar" class="avatar" aria-label="Vikranta player"></div><div class="landmark">Forgotten Realm<br><small>First frontier</small></div></div>
+      <div class="quest"><strong>Quest: First Step</strong><span id="questState">Not started</span><button id="beginQuest">Begin quest</button><button id="move" hidden>Move to the shrine</button><button id="complete" hidden>Complete quest</button></div>
+      <div id="inventory" class="panel"></div>
+    </div>
+    <form id="auth" class="auth" hidden><input id="email" type="email" autocomplete="email" placeholder="Email" required /><input id="password" type="password" autocomplete="current-password" placeholder="Password" minlength="6" required /><input id="displayName" type="text" autocomplete="nickname" placeholder="Display name (new account)" /><div class="actions"><button type="submit">Sign in</button><button type="button" id="signup">Create account</button></div></form>
+    <button id="logout" hidden>Sign out</button>
+  </section></main>`
 
-const status = document.querySelector('#status')
-const player = document.querySelector('#player')
-const auth = document.querySelector('#auth')
-const logout = document.querySelector('#logout')
-const signupButton = document.querySelector('#signup')
-const email = document.querySelector('#email')
-const password = document.querySelector('#password')
-const displayName = document.querySelector('#displayName')
-
-function setStatus(message) {
-  status.textContent = message
-}
-
-function renderPlayer(data) {
-  player.hidden = false
-  player.innerHTML = `
-    <strong>Cloud save connected</strong>
-    <span>Level ${data.playerState?.level ?? 1} · XP ${data.playerState?.xp ?? 0} · Gold ${data.playerState?.gold ?? 0}</span>
-    <span>Save version ${data.playerState?.save_version ?? 1}</span>
-  `
-  auth.hidden = true
-  logout.hidden = false
-}
-
-async function loadPlayer() {
-  try {
-    const session = await getSession()
-    if (!session) {
-      auth.hidden = false
-      logout.hidden = true
-      setStatus('Backend connected. Sign in or create your VIKRANTA account.')
-      return
-    }
-    const data = await bootstrapPlayer()
-    renderPlayer(data)
-    setStatus(`Welcome back. Cloud player state loaded for ${session.user.email}.`)
-  } catch (error) {
-    setStatus(error.message || 'Unable to connect to the VIKRANTA backend.')
-  }
-}
-
-auth.addEventListener('submit', async (event) => {
-  event.preventDefault()
-  try {
-    await signInWithPassword(email.value.trim(), password.value)
-    await loadPlayer()
-  } catch (error) {
-    setStatus(error.message || 'Sign-in failed.')
-  }
-})
-
-signupButton.addEventListener('click', async () => {
-  try {
-    const data = await signUp(email.value.trim(), password.value, displayName.value.trim())
-    setStatus(data.session ? 'Account created. Loading player…' : 'Account created. Check your email if confirmation is required.')
-    if (data.session) await loadPlayer()
-  } catch (error) {
-    setStatus(error.message || 'Account creation failed.')
-  }
-})
-
-logout.addEventListener('click', async () => {
-  try {
-    await signOut()
-    player.hidden = true
-    logout.hidden = true
-    auth.hidden = false
-    setStatus('Signed out. Your cloud save remains stored securely.')
-  } catch (error) {
-    setStatus(error.message || 'Sign-out failed.')
-  }
-})
-
-if (!supabaseConfigured) {
-  setStatus('Web foundation is online. Backend connection requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the deployment environment.')
-  auth.hidden = true
-} else {
-  subscribeToAuth((_event, session) => {
-    if (session) loadPlayer()
-  })
-  loadPlayer()
-}
-
-const style = document.createElement('style')
-style.textContent = `
-  :root { font-family: Inter, system-ui, sans-serif; color: #f4f1ea; background: #090b10; }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-width: 320px; min-height: 100vh; }
-  .shell { min-height: 100vh; display: grid; place-items: center; padding: 32px; }
-  .hero { width: min(760px, 100%); padding: 48px; border: 1px solid #2b303b; border-radius: 24px; background: #11151d; box-shadow: 0 24px 80px rgba(0,0,0,.35); }
-  .eyebrow { margin: 0 0 16px; font-size: 12px; letter-spacing: .18em; opacity: .7; }
-  h1 { margin: 0; font-size: clamp(48px, 12vw, 108px); line-height: .9; letter-spacing: -.04em; }
-  .tagline { font-size: clamp(20px, 4vw, 32px); margin: 24px 0 12px; }
-  .status { max-width: 620px; margin: 0 0 24px; line-height: 1.7; opacity: .72; }
-  .auth { display: grid; gap: 12px; max-width: 460px; }
-  input, button { font: inherit; border-radius: 10px; padding: 12px 14px; }
-  input { border: 1px solid #343a46; background: #0c0f15; color: inherit; }
-  button { border: 1px solid #454c59; background: #e9e2d0; color: #11151d; cursor: pointer; }
-  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-  .player { display: grid; gap: 6px; padding: 18px; margin-bottom: 16px; border: 1px solid #343a46; border-radius: 14px; background: #0c0f15; }
-  .player span { opacity: .72; }
-  @media (max-width: 600px) { .hero { padding: 32px 24px; } }
-`
-document.head.append(style)
+const status = document.querySelector('#status'), player = document.querySelector('#player'), game = document.querySelector('#game'), auth = document.querySelector('#auth'), logout = document.querySelector('#logout')
+const signupButton = document.querySelector('#signup'), email = document.querySelector('#email'), password = document.querySelector('#password'), displayName = document.querySelector('#displayName')
+const questState = document.querySelector('#questState'), beginQuest = document.querySelector('#beginQuest'), move = document.querySelector('#move'), complete = document.querySelector('#complete'), inventory = document.querySelector('#inventory'), avatar = document.querySelector('#avatar')
+let playerState = null
+function setStatus(message) { status.textContent = message }
+function renderPlayer(data) { playerState = data.playerState; player.hidden = false; player.innerHTML = `<strong>Cloud save connected</strong><span>Level ${playerState?.level ?? 1} · XP ${playerState?.xp ?? 0} · Gold ${playerState?.gold ?? 0}</span><span>Zone ${playerState?.current_zone ?? 'Unknown'} · Save v${playerState?.save_version ?? 1}</span>`; auth.hidden = true; logout.hidden = false; game.hidden = false }
+async function refreshGame() { const progress = await getProgress(); const q = progress.find(x => x.quest_id === 'first-step'); questState.textContent = q ? `${q.status} · ${q.progress?.stage ?? 'ready'}` : 'Not started'; beginQuest.hidden = Boolean(q); move.hidden = !q || q.status !== 'active' || q.progress?.stage !== 'started'; complete.hidden = !q || q.status !== 'active' || q.progress?.stage !== 'at_shrine'; const items = await getInventory(); inventory.innerHTML = `<strong>Inventory</strong><span>${items.length ? items.map(x => `${x.item_id} × ${x.quantity}`).join(' · ') : 'Empty'}</span>` }
+async function loadPlayer() { try { const session = await getSession(); if (!session) { auth.hidden = false; logout.hidden = true; game.hidden = true; setStatus('Backend connected. Sign in or create your VIKRANTA account.'); return } const data = await bootstrapPlayer(); renderPlayer(data); await refreshGame(); setStatus(`Welcome back, ${session.user.email}. Your frontier is ready.`) } catch (error) { setStatus(error.message || 'Unable to connect to the VIKRANTA backend.') } }
+auth.addEventListener('submit', async e => { e.preventDefault(); try { await signInWithPassword(email.value.trim(), password.value); await loadPlayer() } catch (error) { setStatus(error.message || 'Sign-in failed.') } })
+signupButton.addEventListener('click', async () => { try { const data = await signUp(email.value.trim(), password.value, displayName.value.trim()); setStatus(data.session ? 'Account created. Loading player…' : 'Account created. Check your email if confirmation is required.'); if (data.session) await loadPlayer() } catch (error) { setStatus(error.message || 'Account creation failed.') } })
+logout.addEventListener('click', async () => { try { await signOut(); player.hidden = true; game.hidden = true; logout.hidden = true; auth.hidden = false; setStatus('Signed out. Your cloud save remains stored securely.') } catch (error) { setStatus(error.message || 'Sign-out failed.') } })
+beginQuest.addEventListener('click', async () => { try { await updateQuest('first-step', 'active', { stage: 'started', location: 'frontier' }); await refreshGame(); setStatus('Quest started. Reach the shrine.') } catch (error) { setStatus(error.message || 'Unable to start quest.') } })
+move.addEventListener('click', async () => { avatar.classList.add('moved'); try { await updateQuest('first-step', 'active', { stage: 'at_shrine', location: 'shrine' }); await refreshGame(); setStatus('You reached the shrine. Complete the quest to receive the server-side reward.') } catch (error) { setStatus(error.message || 'Movement save failed.') } })
+complete.addEventListener('click', async () => { try { const { requireSupabase } = await import('./lib/supabase.js'); const client = requireSupabase(); const { data, error } = await client.functions.invoke('complete-quest', { body: { questId: 'first-step' } }); if (error) throw error; await refreshGame(); playerState = data.playerState; renderPlayer({ playerState }); setStatus(`Quest complete. Server reward: +${data.reward.gold} gold.`) } catch (error) { setStatus(error.message || 'Quest completion failed.') } })
+if (!supabaseConfigured) { setStatus('Web foundation is online. Backend connection requires VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the deployment environment.'); auth.hidden = true } else { subscribeToAuth((_event, session) => { if (session) loadPlayer() }); loadPlayer() }
+const style = document.createElement('style'); style.textContent = `:root{font-family:Inter,system-ui,sans-serif;color:#f4f1ea;background:#090b10}*{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh}.shell{min-height:100vh;display:grid;place-items:center;padding:24px}.hero{width:min(900px,100%);padding:40px;border:1px solid #2b303b;border-radius:24px;background:#11151d;box-shadow:0 24px 80px rgba(0,0,0,.35)}.eyebrow{margin:0 0 12px;font-size:12px;letter-spacing:.18em;opacity:.7}h1{margin:0;font-size:clamp(48px,12vw,108px);line-height:.9}.tagline{font-size:clamp(20px,4vw,32px);margin:20px 0 10px}.status{margin:0 0 20px;line-height:1.6;opacity:.72}.auth{display:grid;gap:10px;max-width:460px}input,button{font:inherit;border-radius:10px;padding:12px 14px}input{border:1px solid #343a46;background:#0c0f15;color:inherit}button{border:1px solid #454c59;background:#e9e2d0;color:#11151d;cursor:pointer}.actions{display:flex;gap:10px;flex-wrap:wrap}.player{display:grid;gap:5px;padding:16px;margin-bottom:16px;border:1px solid #343a46;border-radius:14px;background:#0c0f15}.player span,.panel span{opacity:.72}.game{display:grid;gap:14px}.world{height:280px;position:relative;overflow:hidden;border:1px solid #343a46;border-radius:18px;background:radial-gradient(circle at 70% 35%,#3a2e24 0 8%,transparent 9%),linear-gradient(145deg,#18231d,#2a3325 55%,#172018)}.landmark{position:absolute;right:12%;top:18%;padding:10px;border:1px solid #7f6a4e;border-radius:12px;background:#17140f;text-align:center}.avatar{position:absolute;left:12%;bottom:18%;width:28px;height:28px;border-radius:50%;background:#e9e2d0;transition:left .6s ease}.avatar.moved{left:68%}.quest,.panel{display:grid;gap:8px;padding:16px;border:1px solid #343a46;border-radius:14px;background:#0c0f15}.quest button{width:max-content}@media(max-width:600px){.hero{padding:28px 20px}.world{height:230px}}`; document.head.append(style)
